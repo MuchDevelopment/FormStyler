@@ -134,7 +134,7 @@ class FormStyler extends WireData implements Module, ConfigurableModule {
 			$i->attr('name','MKU_'.$key);
 			$i->label = $key;
 			
-			if(empty($data['MKU_'.$key])){
+			if(!empty($data['MKU_'.$key])){
 				$i->attr('value',$data['MKU_'.$key]);
 			}else{
 				if($value != ''){
