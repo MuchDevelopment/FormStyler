@@ -1,0 +1,290 @@
+<?php
+
+class FormStyler extends WireData implements Module, ConfigurableModule {
+	
+	public static function getModuleInfo() {
+		return array(
+			'title' => 'FormStyler', 
+			'version' => .003, 
+			'singular' => true, 
+			'autoload' => true,
+			'requires' => 'FieldtypeTemplates', 
+			'summary' => 'This module will allow you to change defaults for built in processwire input classes. Handle with care.',
+		);
+	}
+	
+	//default from processwire
+	static protected $dfltMarkup;
+	static protected $dfltClasses;	
+
+	//local arrays with user settings
+	static protected $classes = array();
+	static protected $markup = array();
+	static protected $inputs = array();	
+	static protected $fieldtypes = array();	
+	
+	static protected $template;
+	static protected $templates;
+	
+	protected $data = array();
+	
+	public function getDefaultConfig(){
+		
+		
+		self::$dfltMarkup  = $this->setMarkup();
+		self::$dfltClasses = $this->setClasses();
+				
+		foreach(self::$dfltMarkup as $key=>$value){
+			$value = (string)str_replace(array("\r", "\r\n", "\n"), '\\n', $value);
+			$value = (string)str_replace(array("\t"), '\\t', $value);
+			if(!isset($data['MKU_'.$key]) || $data['MKU_'.$key]== '') $data['MKU_'.$key] = $value;
+		}
+		
+		foreach(self::$dfltClasses as $key=>$value){
+			$value = (string)str_replace(array("\r", "\r\n", "\n"), '\\n', $value);
+			$value = (string)str_replace(array("\t"), '\\t', $value);
+			if(!isset($data['CLA_'.$key]) || $data['CLA_'.$key]== '') $data['CLA_'.$key] = $value;
+		}
+		return $data;
+	}
+	
+	public function __construct() {
+		foreach(self::getDefaultConfig() as $key => $value) {
+			$this->data[$key] = $value;
+		}
+	}
+	
+	public function init(){
+		$data = wire('modules')->getModuleConfigData('FormStyler');
+				
+		self::$templates = $data['templates'];
+	
+		$this->addHookBefore('Page::render', function($event){
+			//get requesting template for exclusion in functions
+			self::$template = $event->object->template->id;
+		});		
+		
+		$this->addHookBefore('InputfieldWrapper::render', $this, 'setInputfieldWrapper');		
+		$this->addHookBefore('Inputfield::render', $this, 'setInputfield');
+		$this->buildClassMkpArrays();		
+	}	
+		
+	 public static function getModuleConfigInputfields(array $data){
+		 
+		$page = Wire::getFuel('page');
+		$w = new InputfieldWrapper();		
+		
+		//Set up template selector
+		$f = wire('modules')->get('FieldtypeTemplates')->getInputfield($page,new NullField);
+		$f->attr('name', 'templates');
+		if(isset($data['templates'])) $f->value = $data['templates'];		
+		$f->label = 'Templates to apply styling to';
+		$w->add($f);		
+			
+		//INPUT Overrides
+		$tmp = array();
+		$fs = wire('modules')->get('InputfieldFieldset');
+		$fs->columnWidth = 33;
+		$fs->attr('name+id','markup');
+		$fs->label = 'Field Class Overrides';
+		
+		foreach(Wire::fuel('fieldtypes')->find() as $field){			
+			$type = (string)$field->getInputfield($page,new NullField);
+			
+			if($type != '' && !in_array($type,$tmp)){
+				$i = wire('modules')->get('InputfieldText');
+				$i->attr('name',"INP_$type");
+				$i->collapsed = 1;
+				$i->label = "$type";
+				
+				if($data["INP_$type"] == '')$data["INP_$type"] = '{{empty}}';
+				
+				$i->attr('value',$data["INP_$type"]);
+				$fs->add($i);				
+			}
+			$tmp[] = $type;
+		}
+		unset($tmp);
+		
+		//#######################################################
+		//until I figure out how to go about getting submit input
+		$type = 'InputfieldSubmit';
+		$i = wire('modules')->get('InputfieldText');
+		$i->attr('name',"INP_$type");
+		$i->collapsed = 1;
+		$i->label = "$type";
+		$i->attr('value',$data["INP_$type"]);
+		$fs->add($i);		
+		//#######################################################		
+		
+		$w->add($fs);
+		
+		//MARKUP SETTINGS
+		$fs = wire('modules')->get('InputfieldFieldset');
+		$fs->columnWidth = 33;
+		$fs->attr('name+id','markup');
+		$fs->label = 'Markup Overrides';		
+		
+		foreach(self::$dfltMarkup as $key=>$value){
+			$value = (string)str_replace(array("\r", "\n"), '', $value);
+			$value = (string)str_replace(array("\t"), '', $value);	
+			
+			$i = wire('modules')->get('InputfieldText');
+			$i->collapsed = 1;
+			$i->attr('name','MKU_'.$key);
+			$i->label = $key;
+			
+			if(empty($data['MKU_'.$key])){
+				$i->attr('value',$data['MKU_'.$key]);
+			}else{
+				if($value != ''){
+					$data['MKU_'.$key] = $value;
+				}else{
+					$data['MKU_'.$key] = '{{empty}}';
+				}
+				$i->attr('value',$data['MKU_'.$key]);
+			}
+			$i->description = 'Default Value:'.$value;
+			
+			$fs->add($i);
+		}
+		
+		$w->add($fs);
+		
+		//CLASS SETTINGS
+		$fs = wire('modules')->get('InputfieldFieldset');
+		$fs->columnWidth = 33;
+		$fs->attr('name+id','Classes');
+		$fs->label = 'Classes Overrides';		
+		
+		foreach(self::$dfltClasses as $key=>$value){
+			
+			$value = (string)str_replace(array("\r", "\n"), '', $value);
+			$value = (string)str_replace(array("\t"), '', $value);	
+			
+			$i = wire('modules')->get('InputfieldText');
+			$i->collapsed = 1;
+			$i->attr('name','CLA_'.$key);
+			$i->label = $key;
+			if(!empty($data['CLA_'.$key])){
+				$i->attr('value',$data['CLA_'.$key]);
+			}else{
+				if($value != ''){
+					$data['CLA_'.$key] = $value;
+				}else{
+					$data['CLA_'.$key] = '{{empty}}';
+				}
+				$i->attr('value',$data['CLA_'.$key]);
+			}
+			$i->description = 'Default Value:'.$value;
+			
+			$fs->add($i);
+		}		
+		
+		$w->add($fs);				
+			
+		return $w;
+	}
+	
+	public function setInputfieldWrapper($event){
+		
+		//if this page is in config values then apply changes
+		if(!is_null(self::$templates) && in_array(self::$template,self::$templates)) {
+			
+			$field = $event->object;
+			$prefix = '';
+			
+			$event->object->setClasses(self::$classes);
+			$event->object->setMarkup(self::$markup);			
+		}
+	}
+	
+	public function setInputfield($event){
+	
+		//if this page is in config values then apply changes
+		
+		$fieldType = (string)$event->object;
+		
+		if(!is_null(self::$templates) && in_array(self::$template,self::$templates) && array_key_exists($fieldType,self::$inputs)){
+			$event->object->attr('class',self::$inputs[$fieldType]);			
+		}
+	
+	}	
+	public function buildClassMkpArrays(){
+			
+			//This method sets values from admin to local arrays
+			$data = wire('modules')->getModuleConfigData('FormStyler');
+			
+			$classes_array = array();
+			$mkp_array = array();				
+			$inp_array = array();
+			$fty_array = array();
+			
+			//separate out arrays to pass off to setter			
+			foreach($data as $key => $value){
+				$actual = substr($key,4,strlen($key));
+				$prefix = substr($key,0,4);
+				
+				if($prefix === 'CLA_' && $value != ''){
+					if($value == '{{empty}}') 	$classes_array[$actual] = '';
+					else 						$classes_array[$actual] = str_replace(array("\n","\t"),"",$value);
+				}
+
+				if($prefix === 'MKU_' && $value != ''){
+					if($value == '{{empty}}') 	$mkp_array[$actual] = '';
+					else 						$mkp_array[$actual] = str_replace(array("\n","\t"),"",$value);
+				}
+				
+				if($prefix === 'INP_' && $value != ''){
+					if($value == '{{empty}}') 	$inp_array[$actual] = '';
+					else 						$inp_array[$actual] = str_replace(array("\r","\n","\t"),"",$value);
+				}
+				
+				if($prefix === 'FTY_' && $value != ''){
+					if($value == '{{empty}}') 	$fty_array[$actual] = '';
+					else 						$fty_array[$actual] = str_replace(array("\n","\t"),"",$value);
+				}					
+			}
+			self::$classes		= $classes_array;	
+			self::$markup 		= $mkp_array;	
+			self::$inputs 		= $inp_array;
+			self::$fieldtypes	= $fty_array;			
+	}
+
+	
+	public function setMarkup(){
+		$router = new DefaultsRouter();
+		$mkup = $router->data['defaultMarkup'];
+		
+		return $mkup;
+	}
+	
+	public function setClasses(){
+		$router = new DefaultsRouter();
+		$cla = $router->data['defaultClasses'];
+		
+		return $cla;
+	}	
+	
+	public function ___install() {
+			
+		if(ProcessWire::versionMajor == 2 && ProcessWire::versionMinor < 1) {
+			throw new WireException("This module requires ProcessWire 2.1 or newer"); 
+		}
+	}
+	
+	public function ___uninstall() {
+		
+	}
+}
+
+class DefaultsRouter extends InputfieldWrapper{
+	
+	public static $defaultMarkup = array();
+	public static $defaultClasses = array();	
+	
+	public function __construct(array $defaults = array()){
+		$this->defaultMarkup  = InputfieldWrapper::$defaultMarkup;
+		$this->defaultClasses = InputfieldWrapper::$defaultClasses;		
+	}
+}
