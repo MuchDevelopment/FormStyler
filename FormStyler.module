@@ -226,23 +226,23 @@ class FormStyler extends WireData implements Module, ConfigurableModule {
 				$prefix = substr($key,0,4);
 				
 				if($prefix === 'CLA_' && $value != ''){
-					if($value == '{{empty}}') 	$classes_array[$actual] = '';
-					else 						$classes_array[$actual] = str_replace(array("\n","\t"),"",$value);
+					if($value == '{{empty}}') $classes_array[$actual] = '';
+					else $classes_array[$actual] = str_replace(array("\n","\t"),"",$value);
 				}
 
 				if($prefix === 'MKU_' && $value != ''){
-					if($value == '{{empty}}') 	$mkp_array[$actual] = '';
-					else 						$mkp_array[$actual] = str_replace(array("\n","\t"),"",$value);
+					if($value == '{{empty}}') $mkp_array[$actual] = '';
+					else $mkp_array[$actual] = str_replace(array("\n","\t"),"",$value);
 				}
 				
 				if($prefix === 'INP_' && $value != ''){
-					if($value == '{{empty}}') 	$inp_array[$actual] = '';
-					else 						$inp_array[$actual] = str_replace(array("\r","\n","\t"),"",$value);
+					if($value == '{{empty}}') $inp_array[$actual] = '';
+					else $inp_array[$actual] = str_replace(array("\r","\n","\t"),"",$value);
 				}
 				
 				if($prefix === 'FTY_' && $value != ''){
-					if($value == '{{empty}}') 	$fty_array[$actual] = '';
-					else 						$fty_array[$actual] = str_replace(array("\n","\t"),"",$value);
+					if($value == '{{empty}}') $fty_array[$actual] = '';
+					else $fty_array[$actual] = str_replace(array("\n","\t"),"",$value);
 				}					
 			}
 			self::$classes		= $classes_array;	
